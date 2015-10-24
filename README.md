@@ -57,3 +57,8 @@ To view what has been placed into the 'stream.db' and 'search.db' files, you can
 
 ##Troubleshooting:
 If you find an issue, submit a pull request or post an issue on this repo. 
+
+##Attribution
+Kenneth Reitz - Requests library - https://github.com/kennethreitz/requests
+
+If you use this in one of your projects, feel free to give us (nVoid) a shoutout or just let us know what you're up to! 
