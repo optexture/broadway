@@ -7,6 +7,10 @@ This tool requires 'Custom Parameters' functionality within TouchDesigner (Build
 ##Installation
 1. Move the ```Twitter``` folder into your project's root level. 
 2. Add the ```nVoid_Twitter_Tools.tox``` component into your project.
+3. Go to https://apps.twitter.com/ and login with your Twitter account
+4. Click the ```Create new app``` button in the Top-right
+5. Fill out all the forms until you can generate all your OAuth credentials (see below)
+6. Enter your credentials in the corresponding custom parameter in the ```nVoid_Twitter_Tools``` parameters.
 
 ##Pre-requisite Python files
 All pre-requisite Python libraries are included as a part of the nVoid Twitter Tools folder package. 
