@@ -23,8 +23,9 @@ To add your OAuth codes, select the ```nVoid_Twitter_Tools``` component in your 
 
 ##Usage
 The control buttons are found in the main container (nVoid_Twitter) Parameter under the 'Commands' heading.
-The 3 controls are 'Start Streaming', 'Stop Streaming' and 'Perform Search'.
-The next tab is 'Settings'. This is where you enter your Twitter app information (from above), stream and search terms, and how many results you'd like returned when performing a search.
+The 3 controls are 'Start Streaming', 'Stop Streaming' and 'Perform Search'.The next tab is 'Settings'. This is where you enter your Twitter app information (from above), stream and search terms, and how many results you'd like returned when performing a search.
+
+We don't recommend putting this tox in your main TouchDesigner process as the DATs can quickly become quite large and slow. Unless you want to add some logic to clear the tweets after a certain amount of rows in the tables or similar, we recommend putting it in another process then just sending data you need to your main process over TCP/IP DATs or other similar network protocol. 
 
 ##Logging
 nVoid Twitter Tools has built-in logging features. All logs are named by the current date and saved in the /LOGS folder inside of the nVoid Twitter Tools folder package.
