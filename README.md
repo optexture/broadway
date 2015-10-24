@@ -1,5 +1,5 @@
 #nVoid-Twitter-TouchDesigner
-Threaded Twitter search and stream TouchDesigner components written in Python with Databasing and logging features.
+Threaded Twitter search and stream TouchDesigner components written in Python with logging features.
 
 ##Build and Version
 This tool requires 'Custom Parameters' functionality within TouchDesigner (Build 45000 and above). It was created, and is stable, in 64-bit build 47400. Recently tested in 64-bit build 56020. 
