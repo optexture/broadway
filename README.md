@@ -51,10 +51,6 @@ The following 'tweet' attributes that are currently used in this plugin and are 
 - "User Language"
 - "User Profile Image link"
 
-
-##Viewing Database:
-To view what has been placed into the 'stream.db' and 'search.db' files, you can download one of a number of free Database programs such as SqliteBrowser, located at - http://sqlitebrowser.org/
-
 ##Troubleshooting:
 If you find an issue, submit a pull request or post an issue on this repo. 
 
