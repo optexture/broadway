@@ -1,4 +1,4 @@
-#nVoid-Twitter-TouchDesigner
+#TouchDesigner-Twitter
 Threaded Twitter search and stream TouchDesigner components written in Python with logging features.
 
 ##Build and Version
