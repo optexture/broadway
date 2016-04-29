@@ -29,6 +29,8 @@ To add your OAuth codes, select the ```nVoid_Twitter_Tools``` component in your 
 The control buttons are found in the main container (nVoid_Twitter) Parameter under the 'Commands' heading.
 The 3 controls are 'Start Streaming', 'Stop Streaming' and 'Perform Search'.The next tab is 'Settings'. This is where you enter your Twitter app information (from above), stream and search terms, and how many results you'd like returned when performing a search.
 
+If you are dealing with large amounts of streaming data, you will want to keep the 'Small Streaming Chunk Size' parameter switched off. If you require a small amount of tweets to be streamed instantly, turning this toggle to the 'ON' position will retrieve the tweets right away.
+
 We don't recommend putting this tox in your main TouchDesigner process as the DATs can quickly become quite large and slow. Unless you want to add some logic to clear the tweets after a certain amount of rows in the tables or similar, we recommend putting it in another process then just sending data you need to your main process over TCP/IP DATs or other similar network protocol. 
 
 ##Logging
