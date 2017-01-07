@@ -153,22 +153,7 @@ class TwitterConnector(base.Extension):
 			json_obj = json.loads(value)
 
 			# extract information from json
-			tweetText = json_obj['text']
-			tweetLanguage = json_obj['lang']
-			tweetTimestamp = json_obj['timestamp_ms']
-			tweetLocation = json_obj['coordinates']
-			tweetHashtags = []
-			for i in json_obj['entities']['hashtags']:
-				tweetHashtags.append(i['text'])
-			userFullName = json_obj['user']['name']
-			userScreenName = json_obj['user']['screen_name']
-			userLocation = json_obj['user']['location']
-			userLanguage = json_obj['user']['lang']
-			userProfileImage = json_obj['user']['profile_image_url']
-
-			# check tweet for double quotes, and replace with single
-			if '"' in tweetText:
-				tweetText = tweetText.replace('"', "'")
+			tweet = _Tweet(json_obj)
 
 			# write to table
 			outdat = self.StreamOutputTable
@@ -176,30 +161,15 @@ class TwitterConnector(base.Extension):
 				outdat.appendRow(self._headers)
 			elif outdat[0, 0] != 'tweetText':
 				outdat.insertRow(self._headers, 0)
-			outdat.appendRow(
-				[tweetText, tweetLanguage, tweetTimestamp, tweetLocation, tweetHashtags, userFullName, userScreenName,
-				 userLocation, userLanguage, userProfileImage])
+			outdat.appendRow(tweet.ToRow())
 
 			# write to console
-			self._WriteToConsole('New Tweet in stream from @' + userScreenName)
-
-			# make tweet dict
-			twitterDict = {}
-			twitterDict["tweetText"] = tweetText
-			twitterDict["tweetLanguage"] = tweetLanguage
-			twitterDict["tweetTimeStamp"] = tweetTimestamp
-			twitterDict["tweetLocation"] = tweetLocation
-			twitterDict["tweetHashtags"] = tweetHashtags
-			twitterDict["userFullName"] = userFullName
-			twitterDict["userScreenName"] = userScreenName
-			twitterDict["userLocation"] = userLocation
-			twitterDict["userLanguage"] = userLanguage
-			twitterDict["userProfileImage"] = userProfileImage
+			self._WriteToConsole('New Tweet in stream from @' + tweet.userScreenName)
 
 			# write to log
-			self._WriteToLog("DEBUG", twitterDict)
+			self._WriteToLog("DEBUG", tweet.ToDict())
 
-		except Exception as e:
+		except queue.Empty as e:
 			# nothing new yet
 			pass
 		finally:
@@ -266,59 +236,34 @@ class TwitterConnector(base.Extension):
 		try:
 			# get tweet from queue
 			inQ = self._SearchInQueue
+			if not inQ:
+				return
 			value = inQ.get_nowait()
 			# prep json
 			json_obj = json.loads(value)
 
-			# parse tweet data from json
-			for i in json_obj['statuses']:
-				tweetText = i['text']
-				tweetLanguage = i['lang']
-				tweetTimestamp = i['created_at']
-				tweetLocation = i['coordinates']
-				tweetHashtags = []
-				for j in i['entities']['hashtags']:
-					tweetHashtags.append(j['text'])
-				userFullName = i['user']['name']
-				userScreenName = i['user']['screen_name']
-				userLocation = i['user']['location']
-				userLanguage = i['user']['lang']
-				userProfileImage = i['user']['profile_image_url']
+			self.ClearSearchResults()
+			outdat = self.SearchOutputTable
+			if outdat.numRows < 1:
+				outdat.appendRow(self._headers)
+			elif outdat[0, 0] != 'tweetText':
+				outdat.insertRow(self._headers, 0)
 
-				# check tweet for double quotes, and replace with single
-				if '"' in tweetText:
-					tweetText = tweetText.replace('"', "'")
+			# parse tweet data from json
+			tweet_objs = json_obj['statuses']
+			self._LogEvent('found %d search results' % len(tweet_objs))
+			for tweet_obj in tweet_objs:
+				tweet = _Tweet(tweet_obj)
 
 				# write to table
-				self.ClearSearchResults()
-				outdat = self.SearchOutputTable
-				if outdat.numRows < 1:
-					outdat.appendRow(self._headers)
-				elif outdat[0, 0] != 'tweetText':
-					outdat.insertRow(self._headers, 0)
-				outdat.appendRow(
-					[tweetText, tweetLanguage, tweetTimestamp, tweetLocation, tweetHashtags, userFullName,
-					 userScreenName, userLocation, userLanguage, userProfileImage])
-
-				# creating twitter dict
-				twitterDict = {}
-				twitterDict["tweetText"] = tweetText
-				twitterDict["tweetLanguage"] = tweetLanguage
-				twitterDict["tweetTimeStamp"] = tweetTimestamp
-				twitterDict["tweetLocation"] = tweetLocation
-				twitterDict["tweetHashtags"] = tweetHashtags
-				twitterDict["userFullName"] = userFullName
-				twitterDict["userScreenName"] = userScreenName
-				twitterDict["userLocation"] = userLocation
-				twitterDict["userLanguage"] = userLanguage
-				twitterDict["userProfileImage"] = userProfileImage
+				outdat.appendRow(tweet.ToRow())
 
 				# write to log
-				self._WriteToLog("DEBUG", twitterDict)
+				self._WriteToLog("DEBUG", tweet.ToDict())
 
 				self._SearchActive = False
 
-		except Exception as e:
+		except queue.Empty as e:
 			# nothing new yet
 			pass
 
@@ -400,3 +345,53 @@ class TwitterConnector(base.Extension):
 			pass
 
 		server.quit()
+
+class _Tweet:
+	def __init__(self, json_obj):
+		# print("ZZZ PARSING TWEET: %r" %  json.dumps(json_obj))
+
+		# extract information from json
+		self.tweetText = json_obj['text']
+		self.tweetLanguage = json_obj['lang']
+		self.tweetTimestamp = json_obj.get('timestamp_ms', json_obj.get('created_at'))
+		self.tweetLocation = json_obj['coordinates']
+		self.tweetHashtags = []
+		for i in json_obj['entities']['hashtags']:
+			self.tweetHashtags.append(i['text'])
+		self.userFullName = json_obj['user']['name']
+		self.userScreenName = json_obj['user']['screen_name']
+		self.userLocation = json_obj['user']['location']
+		self.userLanguage = json_obj['user']['lang']
+		self.userProfileImage = json_obj['user']['profile_image_url']
+
+		# check tweet for double quotes, and replace with single
+		if '"' in self.tweetText:
+			self.tweetText = self.tweetText.replace('"', "'")
+
+	def ToRow(self):
+		return [
+			self.tweetText,
+			self.tweetLanguage,
+			self.tweetTimestamp,
+			self.tweetLocation,
+			self.tweetHashtags,
+			self.userFullName,
+			self.userScreenName,
+			self.userLocation,
+			self.userLanguage,
+			self.userProfileImage
+		]
+
+	def ToDict(self):
+		return {
+			"tweetText": self.tweetText,
+			"tweetLanguage": self.tweetLanguage,
+			"tweetTimeStamp": self.tweetTimestamp,
+			"tweetLocation": self.tweetLocation,
+			"tweetHashtags": self.tweetHashtags,
+			"userFullName": self.userFullName,
+			"userScreenName": self.userScreenName,
+			"userLocation": self.userLocation,
+			"userLanguage": self.userLanguage,
+			"userProfileImage": self.userProfileImage
+		}
