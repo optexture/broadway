@@ -76,6 +76,7 @@ class TwitterConnector(base.Extension):
 				self._WriteToLog("DEBUG", 'pulsed. now starting stream..')
 				self._WriteToConsole('starting stream')
 				self._LoadParams()
+				self.ClearStreamResults()
 
 				# create header and auth
 				client_args = {}
@@ -210,6 +211,8 @@ class TwitterConnector(base.Extension):
 			# write to console
 			self._WriteToLog("DEBUG", 'searching twitter for keywords and hashtags..')
 			self._WriteToConsole("Searching Twitter for keywords and hashtags: " + self._searchterms)
+
+			self.ClearSearchResults()
 
 			# function to perform python search in another thread
 			def pythonSearch(outQ):
