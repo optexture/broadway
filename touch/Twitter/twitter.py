@@ -205,11 +205,7 @@ class TwitterConnector(base.Extension):
 			self._SearchInQueue = myInQ
 
 			# create requests header
-			client_args = {}
 			auth = OAuth1(self._appkey, self._appsecret, self._oauthtoken, self._oauthsecret)
-			default_headers = {'User-Agent': 'TouchDesigner Twitter Plugin Powered by nVoid'}
-			client_args['headers'] = default_headers
-			client_args['timeout'] = 300
 
 			# write to console
 			self._WriteToLog("DEBUG", 'searching twitter for keywords and hashtags..')
