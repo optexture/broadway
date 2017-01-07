@@ -5,13 +5,15 @@ try:
 except ImportError:
 	import common.lib.base as base
 
-import requests, queue, json, time, threading
+import sys, requests, queue, json, datetime, time, threading
 from requests_oauthlib import OAuth1
 
 if False:
 	# trick pycharm...
 	project = object()
 	project.folder = ''
+	licences = object()
+	licences.systemCode = ''
 
 class TwitterConnector(base.Extension):
 	def __init__(self, comp):
@@ -26,6 +28,9 @@ class TwitterConnector(base.Extension):
 		self._chunksize = None
 		self._locations = None
 		self._headers = ['tweetText', 'tweetLanguage', 'tweetTimestamp', 'tweetLocation', 'tweetHashtags', 'userFullName', 'userScreenName', 'userLocation', 'userLanguage', 'userProfileImage']
+		self._StreamInQueue = None
+		self._StreamOutQueue = None
+		self._SearchInQueue = None
 
 	def _LoadParams(self):
 		self._oauthtoken = self.comp.par.OAUTH_KEY.eval()
@@ -39,85 +44,112 @@ class TwitterConnector(base.Extension):
 		self._locations = self.comp.par.Tweetlocations.eval()
 
 	@property
-	def _StreamCheck(self):
-		return self.comp.op('./comm/streamCheck')
+	def _StreamActive(self):
+		return self.comp.par.Streamactive
+
+	@_StreamActive.setter
+	def _StreamActive(self, val):
+		self.comp.par.Streamactive = val
+		self._CheckStreamCallbacks.cook(force=True)
+
+	@property
+	def _CheckStreamCallbacks(self):
+		return self.comp.op('./checkForStream')
+
+	@property
+	def _SearchActive(self):
+		return self.comp.par.Searchactive
+
+	@_SearchActive.setter
+	def _SearchActive(self, val):
+		self.comp.par.Searchactive = val
+		self._CheckSearchCallbacks.cook(force=True)
+
+	@property
+	def _CheckSearchCallbacks(self):
+		return self.comp.op('./checkForSearch')
 
 	def StartStream(self):
-		streamcheck = self._StreamCheck
-		if streamcheck[0] == 0:
-			self._WriteToLog("DEBUG", 'pulsed. now starting stream..')
-			self._WriteToConsole('starting stream')
-			self._DoStartStream()
-			streamcheck.par.value0 = 1
-		else:
-			self._WriteToLog("DEBUG", 'stream already active..')
-			self._WriteToConsole("Stream already active, try stopping existing stream.")
+		self._LogBegin('StartStream()')
+		try:
+			if not self._StreamActive:
+				self._WriteToLog("DEBUG", 'pulsed. now starting stream..')
+				self._WriteToConsole('starting stream')
+				self._LoadParams()
 
-	def _DoStartStream(self):
-		self._LoadParams()
+				# create header and auth
+				client_args = {}
+				auth = OAuth1(self._appkey, self._appsecret, self._oauthtoken, self._oauthsecret)
+				default_headers = {'User-Agent': 'TouchDesigner Twitter Plugin Powered by nVoid'}
+				client_args['headers'] = default_headers
+				client_args['timeout'] = 300
 
-		# create header and auth
-		client_args = {}
-		auth = OAuth1(self._appkey, self._appsecret, self._oauthtoken, self._oauthsecret)
-		default_headers = {'User-Agent': 'TouchDesigner Twitter Plugin Powered by nVoid'}
-		client_args['headers'] = default_headers
-		client_args['timeout'] = 300
+				if self._locations:
+					client_args['locations'] = self._locations
 
-		if self._locations:
-			client_args['locations'] = self._locations
+				# setup i/o queues
+				myInQ = queue.Queue()
+				myOutQ = queue.Queue()
+				self._StreamInQueue = myInQ
+				self._StreamOutQueue = myOutQ
 
-		# setup i/o queues
-		myInQ = queue.Queue()
-		myOutQ = queue.Queue()
-		self._StreamInQueue = myInQ
-		self._StreamOutQueue = myOutQ
-
-		# function to be launched in another thread
-		def pythonStream(inQ, outQ):
-			try:
-				client = requests.Session()
-				client.auth = auth
-				client.stream = True
-
-				r = client.post('https://stream.twitter.com/1.1/statuses/filter.json?track=' + self._searchterms,
-				                client_args)
-
-				for line in r.iter_lines(chunk_size=self._chunksize):
+				# function to be launched in another thread
+				def pythonStream(inQ, outQ):
 					try:
-						value = inQ.get_nowait()
-						if value == 'STOP':
-							print('stopping stream')
-							break
+						client = requests.Session()
+						client.auth = auth
+						client.stream = True
+
+						r = client.post('https://stream.twitter.com/1.1/statuses/filter.json?track=' + self._searchterms,
+						                client_args)
+
+						for line in r.iter_lines(chunk_size=self._chunksize):
+							try:
+								value = inQ.get_nowait()
+								if value == 'STOP':
+									print('stopping stream')
+									break
+							except:
+								pass
+							if line:
+								outQ.put(line.decode('utf-8'))
 					except:
 						pass
-					if line:
-						outQ.put(line.decode('utf-8'))
-			except:
-				pass
 
-		# start new stream thread
-		self._WriteToLog("DEBUG", 'starting stream thread')
-		myThread = threading.Thread(target=pythonStream, args=(myOutQ, myInQ,))
-		myThread.start()
+				# start new stream thread
+				self._WriteToLog("DEBUG", 'starting stream thread')
+				myThread = threading.Thread(target=pythonStream, args=(myOutQ, myInQ,))
+				myThread.start()
+				self._StreamActive = True
+			else:
+				self._WriteToLog("DEBUG", 'stream already active..')
+				self._WriteToConsole("Stream already active, try stopping existing stream.")
+		finally:
+			self._LogEnd()
 
 	def StopStream(self):
-		self._WriteToLog("DEBUG", 'pulsed. now stopping stream.')
-		self._WriteToConsole('stopping stream')
-		self._DoStopStream()
-		self._StreamCheck.par.value0 = 0
-
-	def _DoStopStream(self):
-		inQ = self._StreamOutQueue
-		inQ.put('STOP')
+		self._LogBegin('StopStream()')
+		try:
+			if not self._StreamOutQueue:
+				self._WriteToLog("DEBUG", 'pulsed. stream already stopped.')
+				self._WriteToConsole('stream already stopped')
+			else:
+				self._WriteToLog("DEBUG", 'pulsed. now stopping stream.')
+				self._WriteToConsole('stopping stream')
+				self._StreamOutQueue.put('STOP')
+				# self._StreamOutQueue = None # ... TODO: figure out if this would cause a memory leak
+			self._StreamActive = False
+		finally:
+			self._LogEnd()
 
 	def Stream_OnFrameStart(self):
+		# self._LogBegin('Stream_OnFrameStart()')
 		try:
 			# check queue for tweet
 			inQ = self._StreamInQueue
 			value = inQ.get_nowait()
 
 			# prep json
-			import json
 			json_obj = json.loads(value)
 
 			# extract information from json
@@ -139,7 +171,7 @@ class TwitterConnector(base.Extension):
 				tweetText = tweetText.replace('"', "'")
 
 			# write to table
-			outdat = self._StreamOutputTable
+			outdat = self.StreamOutputTable
 			if outdat.numRows < 1:
 				outdat.appendRow(self._headers)
 			elif outdat[0, 0] != 'tweetText':
@@ -170,72 +202,201 @@ class TwitterConnector(base.Extension):
 		except Exception as e:
 			# nothing new yet
 			pass
+		finally:
+			# self._LogEnd()
+			pass
 
 	@property
 	def StreamOutputTable(self):
-		return self.comp.par.Streamoutput.eval() or self.comp.op('./python/default_stream_table')
+		return self.comp.par.Streamoutput.eval() or self.comp.op('./default_stream_table')
 
 	@property
-	def _SearchOutputTable(self):
-		return self.comp.par.Streamoutput.eval() or self.comp.op('./python/tweetTable')
+	def SearchOutputTable(self):
+		return self.comp.par.Searchoutput.eval() or self.comp.op('./default_search_table')
 
 	def ClearStreamResults(self):
 		self._ClearResultsTable(self.StreamOutputTable)
+
+	def ClearSearchResults(self):
+		self._ClearResultsTable(self.SearchOutputTable)
 
 	def _ClearResultsTable(self, outdat):
 		outdat.insertRow(self._headers)
 		outdat.setSize(1, len(self._headers))
 
 	def StartSearch(self):
-		self._WriteToLog("DEBUG", "pulsed. now starting search..")
-		self.comp.op('./python/search').run()
+		self._LogBegin('StartSearch()')
+		try:
+			self._WriteToLog("DEBUG", "pulsed. now starting search..")
+			self._LoadParams()
+
+			# setup queue
+			myInQ = queue.Queue()
+			self._SearchInQueue = myInQ
+
+			# create requests header
+			client_args = {}
+			auth = OAuth1(self._appkey, self._appsecret, self._oauthtoken, self._oauthsecret)
+			default_headers = {'User-Agent': 'TouchDesigner Twitter Plugin Powered by nVoid'}
+			client_args['headers'] = default_headers
+			client_args['timeout'] = 300
+
+			# write to console
+			self._WriteToLog("DEBUG", 'searching twitter for keywords and hashtags..')
+			self._WriteToConsole("Searching Twitter for keywords and hashtags: " + self._searchterms)
+
+			# function to perform python search in another thread
+			def pythonSearch(outQ):
+				client = requests.Session()
+				client.auth = auth
+
+				r = client.get(
+					'https://api.twitter.com/1.1/search/tweets.json?q=%s&count=%d' %(self._searchterms, self._searchcount))
+				outQ.put(r.text)
+
+			# start new thread to search
+			self._WriteToLog("DEBUG", 'creating thread')
+			myThread = threading.Thread(target=pythonSearch, args=(myInQ,))
+			myThread.start()
+			self._SearchActive = True
+		finally:
+			self._LogEnd()
+
+	def Search_OnFrameStart(self):
+		try:
+			# get tweet from queue
+			inQ = self._SearchInQueue
+			value = inQ.get_nowait()
+			# prep json
+			json_obj = json.loads(value)
+
+			# parse tweet data from json
+			for i in json_obj['statuses']:
+				tweetText = i['text']
+				tweetLanguage = i['lang']
+				tweetTimestamp = i['created_at']
+				tweetLocation = i['coordinates']
+				tweetHashtags = []
+				for j in i['entities']['hashtags']:
+					tweetHashtags.append(j['text'])
+				userFullName = i['user']['name']
+				userScreenName = i['user']['screen_name']
+				userLocation = i['user']['location']
+				userLanguage = i['user']['lang']
+				userProfileImage = i['user']['profile_image_url']
+
+				# check tweet for double quotes, and replace with single
+				if '"' in tweetText:
+					tweetText = tweetText.replace('"', "'")
+
+				# write to table
+				self.ClearSearchResults()
+				outdat = self.SearchOutputTable
+				if outdat.numRows < 1:
+					outdat.appendRow(self._headers)
+				elif outdat[0, 0] != 'tweetText':
+					outdat.insertRow(self._headers, 0)
+				outdat.appendRow(
+					[tweetText, tweetLanguage, tweetTimestamp, tweetLocation, tweetHashtags, userFullName,
+					 userScreenName, userLocation, userLanguage, userProfileImage])
+
+				# creating twitter dict
+				twitterDict = {}
+				twitterDict["tweetText"] = tweetText
+				twitterDict["tweetLanguage"] = tweetLanguage
+				twitterDict["tweetTimeStamp"] = tweetTimestamp
+				twitterDict["tweetLocation"] = tweetLocation
+				twitterDict["tweetHashtags"] = tweetHashtags
+				twitterDict["userFullName"] = userFullName
+				twitterDict["userScreenName"] = userScreenName
+				twitterDict["userLocation"] = userLocation
+				twitterDict["userLanguage"] = userLanguage
+				twitterDict["userProfileImage"] = userProfileImage
+
+				# write to log
+				self._WriteToLog("DEBUG", twitterDict)
+
+				self._SearchActive = False
+
+		except Exception as e:
+			# nothing new yet
+			pass
 
 	@property
-	def _Storage(self):
-		return self.comp.op('./python')
-
-	@property
-	def _StreamInQueue(self):
-		return self._Storage.fetch('streamInQ')
-
-	@_StreamInQueue.setter
-	def _StreamInQueue(self, val):
-		self._Storage.store('streamInQ', val)
-
-	@property
-	def _StreamOutQueue(self):
-		return self._Storage.fetch('streamOutQ')
-
-	@_StreamOutQueue.setter
-	def _StreamOutQueue(self, val):
-		self._Storage.store('streamOutQ', val)
-
-	@property
-	def _CommFifo1(self):
-		return self.comp.op('./comm/fifo1')
+	def _LogFifo(self):
+		return self.comp.op('./log_fifo')
 
 	def OnStart(self):
-		self._CommFifo1.par.clear.pulse()
+		self._LogFifo.par.clear.pulse()
 
-		import sys
 		mypath = project.folder + '/Twitter/pylib/'
 		if mypath not in sys.path:
 			sys.path.append(mypath)
 
-		self._StreamCheck.par.value0 = 0
+		self._StreamActive = False
+		self._SearchActive = False
 
 	def OnCreate(self):
-		self._CommFifo1.par.clear.pulse()
+		self._LogFifo.par.clear.pulse()
 
-		import sys
 		mypath = project.folder + '/Twitter/pylib/'
 		if mypath not in sys.path:
 			sys.path.append(mypath)
 
-		self._StreamCheck.par.value0 = 0
+		self._StreamActive = False
+		self._SearchActive = False
 
-	def _WriteToLog(self, logtype, message):
-		self.comp.mod.writeTo.log(logtype, message)
+	@staticmethod
+	def _WriteToLog(logtype, message):
+		# get file + folder ready
+		folderPath = str(project.folder + '/Twitter/LOGS/')
+		localDate = time.localtime()
+		fileDate = str(time.asctime(localDate))[4:-14] + ' ' + str(time.asctime(localDate))[-4:]
+		fileDate = fileDate.replace(' ', '_')
+		filePath = folderPath + fileDate + '.log'
+
+		# prep json
+		json_obj = {}
+		json_obj['logTime'] = time.asctime(localDate)
+		json_obj['logType'] = logtype
+		json_obj['data'] = message
+
+		prepped_json = json.dumps(json_obj)
+		logString = prepped_json + '\n'
+
+		# write it
+		with open(filePath, 'a') as f:
+			f.write(logString)
+		f.close()
 
 	def _WriteToConsole(self, message):
-		self.comp.mod.writeTo.console(message)
+		timestamp = datetime.datetime.now().strftime("%d %B %Y %I:%M%p")
+		self._LogFifo.appendRow([timestamp + ' - ' + message])
+
+	@staticmethod
+	def __UNUSED_support(msg='CRITICAL ERROR'):
+		import smtplib
+
+		TO = "TO ADDRESS HERE"
+		SUBJECT = " PROBLEM : CRITICAL "
+		TEXT = msg + " - System ID is: " + str(licences.systemCode)
+		# msg is an argument that defaults to critical error and
+		# sends you the system code of the machine which you can
+		# log to keep track of where your machines are
+
+		gmail_sender = 'GMAIL FROM ADDRESS HERE'
+		gmail_password = 'GMAIL PASSWROD FOR ACCOUNT HERE'
+
+		server = smtplib.SMTP('smtp.gmail.com', 587)
+		server.ehlo()
+		server.starttls()
+		server.login(gmail_sender, gmail_password)
+
+		BODY = '\r\n'.join(['To: %s' % TO, 'From: %s' % gmail_sender, 'Subject: %s' % SUBJECT, '', TEXT])
+
+		try:
+			server.sendmail(gmail_sender, [TO], BODY)
+		except:
+			pass
+
+		server.quit()
