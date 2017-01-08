@@ -22,11 +22,12 @@ class TwitterConnector(base.Extension):
 		self._oauthsecret = None
 		self._appkey = None
 		self._appsecret = None
-		self._streamterms = None
+		#self._streamterms = None
 		self._searchterms = None
 		self._searchcount = None
 		self._chunksize = None
 		self._locations = None
+		self._filterlevel = 'none'
 		self._headers = ['tweetText', 'tweetLanguage', 'tweetTimestamp', 'tweetLocation', 'tweetHashtags', 'userFullName', 'userScreenName', 'userLocation', 'userLanguage', 'userProfileImage']
 		self._StreamInQueue = None
 		self._StreamOutQueue = None
@@ -37,11 +38,12 @@ class TwitterConnector(base.Extension):
 		self._oauthsecret = self.comp.par.OAUTH_SECRET.eval()
 		self._appkey = self.comp.par.CONSUMER_KEY.eval()
 		self._appsecret = self.comp.par.CONSUMER_SECRET.eval()
-		self._streamterms = self.comp.par.STREAM_TERMS.eval().replace(' ', '%20').replace(',', '%2C')
+		#self._streamterms = self.comp.par.STREAM_TERMS.eval().replace(' ', '%20').replace(',', '%2C')
 		self._searchterms = self.comp.par.SEARCH_TERMS.eval()
 		self._chunksize = 512 if self.comp.par.Chunk else 1
 		self._searchcount = self.comp.par.TWEETS_PER_SEARCH.eval()
 		self._locations = self.comp.par.Tweetlocations.eval()
+		self._filterlevel = self.comp.par.Filterlevel.eval()
 
 	@property
 	def _StreamActive(self):
@@ -85,9 +87,6 @@ class TwitterConnector(base.Extension):
 				client_args['headers'] = default_headers
 				client_args['timeout'] = 300
 
-				if self._locations:
-					client_args['locations'] = self._locations
-
 				# setup i/o queues
 				myInQ = queue.Queue()
 				myOutQ = queue.Queue()
@@ -101,8 +100,15 @@ class TwitterConnector(base.Extension):
 						client.auth = auth
 						client.stream = True
 
-						r = client.post('https://stream.twitter.com/1.1/statuses/filter.json?track=' + self._searchterms,
-						                client_args)
+						r = client.post(
+							'https://stream.twitter.com/1.1/statuses/filter.json',
+							client_args,
+							params={
+								'track': self._searchterms,
+								'filter_level': self._filterlevel,
+								'locations': self._locations,
+							}
+						)
 
 						for line in r.iter_lines(chunk_size=self._chunksize):
 							try:
@@ -148,6 +154,9 @@ class TwitterConnector(base.Extension):
 		try:
 			# check queue for tweet
 			inQ = self._StreamInQueue
+			if not inQ:
+				self._StreamActive = False
+				return
 			value = inQ.get_nowait()
 
 			# prep json
@@ -163,6 +172,7 @@ class TwitterConnector(base.Extension):
 			elif outdat[0, 0] != 'tweetText':
 				outdat.insertRow(self._headers, 0)
 			outdat.appendRow(tweet.ToRow())
+			self.comp.par.Onstreamresult.pulse()
 
 			# write to console
 			self._WriteToConsole('New Tweet in stream from @' + tweet.userScreenName)
@@ -236,6 +246,7 @@ class TwitterConnector(base.Extension):
 			# get tweet from queue
 			inQ = self._SearchInQueue
 			if not inQ:
+				self._SearchActive = False
 				return
 			value = inQ.get_nowait()
 			# prep json
@@ -260,7 +271,7 @@ class TwitterConnector(base.Extension):
 				# write to log
 				self._WriteToLog("DEBUG", tweet.ToDict())
 
-				self._SearchActive = False
+			self._SearchActive = False
 
 		except queue.Empty as e:
 			# nothing new yet
@@ -350,18 +361,21 @@ class _Tweet:
 		# print("ZZZ PARSING TWEET: %r" %  json.dumps(json_obj))
 
 		# extract information from json
-		self.tweetText = json_obj['text']
-		self.tweetLanguage = json_obj['lang']
+		self.tweetText = json_obj.get('text')
+		self.tweetLanguage = json_obj.get('lang')
 		self.tweetTimestamp = json_obj.get('timestamp_ms', json_obj.get('created_at'))
-		self.tweetLocation = json_obj['coordinates']
+		self.tweetLocation = json_obj.get('coordinates')
 		self.tweetHashtags = []
-		for i in json_obj['entities']['hashtags']:
+		entities = json_obj.get('entities')
+		hashtags = entities and entities.get('hashtags')
+		for i in hashtags:
 			self.tweetHashtags.append(i['text'])
-		self.userFullName = json_obj['user']['name']
-		self.userScreenName = json_obj['user']['screen_name']
-		self.userLocation = json_obj['user']['location']
-		self.userLanguage = json_obj['user']['lang']
-		self.userProfileImage = json_obj['user']['profile_image_url']
+		user = json_obj.get('user', {})
+		self.userFullName = user.get('name')
+		self.userScreenName = user.get('screen_name')
+		self.userLocation = user.get('location')
+		self.userLanguage = user.get('lang')
+		self.userProfileImage = user.get('profile_image_url')
 
 		# check tweet for double quotes, and replace with single
 		if '"' in self.tweetText:
