@@ -74,63 +74,63 @@ class TwitterConnector(base.Extension):
 	def StartStream(self):
 		self._LogBegin('StartStream()')
 		try:
-			if not self._StreamActive:
-				self._WriteToLog("DEBUG", 'pulsed. now starting stream..')
-				self._WriteToConsole('starting stream')
-				self._LoadParams()
-				self.ClearStreamResults()
-
-				# create header and auth
-				client_args = {}
-				auth = OAuth1(self._appkey, self._appsecret, self._oauthtoken, self._oauthsecret)
-				default_headers = {'User-Agent': 'TouchDesigner Twitter Plugin Powered by nVoid'}
-				client_args['headers'] = default_headers
-				client_args['timeout'] = 300
-
-				# setup i/o queues
-				myInQ = queue.Queue()
-				myOutQ = queue.Queue()
-				self._StreamInQueue = myInQ
-				self._StreamOutQueue = myOutQ
-
-				# function to be launched in another thread
-				def pythonStream(inQ, outQ):
-					try:
-						client = requests.Session()
-						client.auth = auth
-						client.stream = True
-
-						r = client.post(
-							'https://stream.twitter.com/1.1/statuses/filter.json',
-							client_args,
-							params={
-								'track': self._searchterms,
-								'filter_level': self._filterlevel,
-								'locations': self._locations,
-							}
-						)
-
-						for line in r.iter_lines(chunk_size=self._chunksize):
-							try:
-								value = inQ.get_nowait()
-								if value == 'STOP':
-									print('stopping stream')
-									break
-							except:
-								pass
-							if line:
-								outQ.put(line.decode('utf-8'))
-					except:
-						pass
-
-				# start new stream thread
-				self._WriteToLog("DEBUG", 'starting stream thread')
-				myThread = threading.Thread(target=pythonStream, args=(myOutQ, myInQ,))
-				myThread.start()
-				self._StreamActive = True
-			else:
+			if self._StreamActive:
 				self._WriteToLog("DEBUG", 'stream already active..')
-				self._WriteToConsole("Stream already active, try stopping existing stream.")
+				self._WriteToConsole("Stream already active, stopping existing stream.")
+				self.StopStream()
+			self._WriteToLog("DEBUG", 'pulsed. now starting stream..')
+			self._WriteToConsole('starting stream')
+			self._LoadParams()
+			self.ClearStreamResults()
+
+			# create header and auth
+			client_args = {}
+			auth = OAuth1(self._appkey, self._appsecret, self._oauthtoken, self._oauthsecret)
+			default_headers = {'User-Agent': 'TouchDesigner Twitter Plugin Powered by nVoid'}
+			client_args['headers'] = default_headers
+			client_args['timeout'] = 300
+
+			# setup i/o queues
+			myInQ = queue.Queue()
+			myOutQ = queue.Queue()
+			self._StreamInQueue = myInQ
+			self._StreamOutQueue = myOutQ
+
+			# function to be launched in another thread
+			def pythonStream(inQ, outQ):
+				try:
+					client = requests.Session()
+					client.auth = auth
+					client.stream = True
+
+					r = client.post(
+						'https://stream.twitter.com/1.1/statuses/filter.json',
+						client_args,
+						params={
+							'track': self._searchterms,
+							'filter_level': self._filterlevel,
+							'locations': self._locations,
+						}
+					)
+
+					for line in r.iter_lines(chunk_size=self._chunksize):
+						try:
+							value = inQ.get_nowait()
+							if value == 'STOP':
+								print('stopping stream')
+								break
+						except:
+							pass
+						if line:
+							outQ.put(line.decode('utf-8'))
+				except:
+					pass
+
+			# start new stream thread
+			self._WriteToLog("DEBUG", 'starting stream thread')
+			myThread = threading.Thread(target=pythonStream, args=(myOutQ, myInQ,))
+			myThread.start()
+			self._StreamActive = True
 		finally:
 			self._LogEnd()
 
