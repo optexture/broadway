@@ -1,6 +1,6 @@
 //Maya ASCII 2015 scene
 //Name: la_theatre_model.ma
-//Last modified: Sat, Jan 14, 2017 09:25:41 PM
+//Last modified: Sat, Jan 14, 2017 11:09:58 PM
 //Codeset: 1252
 requires maya "2015";
 currentUnit -l centimeter -a degree -t film;
@@ -11,12 +11,12 @@ fileInfo "cutIdentifier" "201402282131-909040";
 fileInfo "osv" "Microsoft Windows 8 Business Edition, 64-bit  (Build 9200)\n";
 createNode transform -s -n "persp";
 	setAttr ".v" no;
-	setAttr ".t" -type "double3" -5.3696907310437556 -5.4186017059766467 126.05268553583426 ;
-	setAttr ".r" -type "double3" 369.29473361498276 2517.8000000033567 -4.9732824146287295e-017 ;
+	setAttr ".t" -type "double3" 14.830856540411371 88.488144757276444 105.19690308824138 ;
+	setAttr ".r" -type "double3" 315.89473361496755 2523.4000000031529 1.9913517977495551e-016 ;
 createNode camera -s -n "perspShape" -p "persp";
 	setAttr -k off ".v" no;
 	setAttr ".fl" 34.999999999999993;
-	setAttr ".coi" 137.48309947074699;
+	setAttr ".coi" 170.33834280169742;
 	setAttr ".imn" -type "string" "persp";
 	setAttr ".den" -type "string" "persp_depth";
 	setAttr ".man" -type "string" "persp_mask";
