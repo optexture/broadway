@@ -1,6 +1,6 @@
 //Maya ASCII 2014 scene
 //Name: blue-jeans-text.ma
-//Last modified: Sun, Jan 15, 2017 06:05:44 PM
+//Last modified: Mon, Jan 16, 2017 08:43:49 PM
 //Codeset: UTF-8
 requires maya "2014";
 currentUnit -l centimeter -a degree -t film;
@@ -11,12 +11,12 @@ fileInfo "cutIdentifier" "201310090106-890429";
 fileInfo "osv" "Mac OS X 10.9.6";
 createNode transform -s -n "persp";
 	setAttr ".v" no;
-	setAttr ".t" -type "double3" -24.394897757731876 -0.87341656798819667 9.7946802967126398 ;
-	setAttr ".r" -type "double3" 3.861647270350955 388.19999999998561 2.2555757284924791e-16 ;
+	setAttr ".t" -type "double3" -18.723162211361171 19.424558282856072 5.8685785256523513 ;
+	setAttr ".r" -type "double3" -72.338352729649003 377.39999999997411 -3.3330751032168456e-15 ;
 createNode camera -s -n "perspShape" -p "persp";
 	setAttr -k off ".v" no;
 	setAttr ".fl" 34.999999999999986;
-	setAttr ".coi" 12.968815354047148;
+	setAttr ".coi" 17.266928247078571;
 	setAttr ".imn" -type "string" "persp";
 	setAttr ".den" -type "string" "persp_depth";
 	setAttr ".man" -type "string" "persp_mask";
