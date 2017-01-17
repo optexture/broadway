@@ -1,0 +1,7 @@
+*.log
+*-output-*.jpg
+*-output-*.mp4
+*-output-*.mov
+*.dmp
+touch/CrashAutoSave.toe
+.idea/
